@@ -34,9 +34,29 @@ def make_word_dict(dict_filename):
 
 class BoggleOptimizer:
     def __init__(self, w, dict_filename):
+        self.points = {
+            1: 0,
+            2: 0,
+            3: 1,
+            4: 1,
+            5: 2,
+            6: 3,
+            7: 5,
+            8: 11,
+            9: 11,
+            10: 11,
+            11: 11,
+            12: 11,
+            13: 11,
+            14: 11,
+            15: 11,
+            16: 11
+        }
         self.model = LpProblem(name='Boggle', sense=LpMinimize)
-        self.w = self.sort_words(w)
+        self.w, self.cubes = self.sort_words(w)
         self.global_word_dict = self.open_word_dict(dict_filename)
+        self.vars, self.output = self.make_vars()
+        self.neighborhoods = self.total_neighborhoods()
 
     @staticmethod
     def open_word_dict(dict_filename):
@@ -46,7 +66,10 @@ class BoggleOptimizer:
 
     @staticmethod
     def sort_words(w):
-        return sorted([sorted(l) for l in w])
+        s = sorted([sorted(l) for l in w])
+        cubes = sorted([sorted([(i, x) for i in w[x]]) for x in range(len(w))])
+        print(cubes)
+        return s, cubes
 
     '''
     def get_next_entry(self, query):
@@ -62,6 +85,19 @@ class BoggleOptimizer:
                 return next_key[c]
         return query[-1]'''
 
+    def get_permutation_map(self, word):
+        results = []
+        str_word = ''.join([i[0] for i in word])
+        matches = self.global_word_dict[str_word]
+        for w in matches:
+            helper_1 = [(letter, w.index(letter)) for letter in list(w)]
+            helper_1.sort()
+            helper_2 = [(helper_1[i][1], word[i][1]) for i in range(len(word))]
+            helper_2.sort()
+            indices = '.'.join([str(i[1]) for i in helper_2])
+            results.append((w, indices))
+        return results
+
     def enumerate_words(self, w, output, current_word):
         # step out if we've used up all the available letters
         if 0 >= len(w):
@@ -74,8 +110,8 @@ class BoggleOptimizer:
             # alphabetically first letter is first entry in sorted list w
             new_letter = w[0][0]
 
-            # append nw letter to current candidate word
-            new_word = current_word + new_letter
+            # append new letter to current candidate word
+            new_word = current_word + [new_letter]
 
             #print(w)
             #print(new_word)
@@ -87,7 +123,7 @@ class BoggleOptimizer:
             # check if current string constitutes a real word
             # if so, append corresponding words to list of output words
             try:
-                matches = self.global_word_dict[new_word]
+                matches = self.get_permutation_map(new_word)
                 output += matches
             except KeyError:
                 pass
@@ -143,8 +179,49 @@ class BoggleOptimizer:
         #global last_match
         #global_word_dict, global_word_list = open_word_dict()
         #last_match = global_word_list[0]
-        output = self.enumerate_words(self.w, [], '')
-        return output
+        output = self.enumerate_words(self.cubes, [], [])
+        vars = [LpVariable(f'x_{item[0]}_{item[1]}', cat=LpBinary) for item in output]
+        return vars, output
+
+    def build_objective(self):
+        self.model += lpSum([self.points[len(self.output[i][0])] * self.vars[i] for i in range(len(self.output))])
+        print(lpSum([self.points[len(self.output[i][0])] * self.vars[i] for i in range(len(self.output))]))
+        return
+
+    @staticmethod
+    def get_neighborhoods(word):
+        neighborhoods = {}
+        word_list = list(word[0])
+        for l in range(len(word_list)):
+            n = []
+            if l-1 >= 0:
+                 n.append(word_list[l-1])
+            if l+1 < len(word_list):
+                n.append(word_list[l+1])
+            neighborhoods[(word_list[l], int(word[1].split('.')[l]))] = n
+        return neighborhoods
+
+    def total_neighborhoods(self):
+        n = {}
+        for item in self.output:
+            new = self.get_neighborhoods(item)
+            n[item] = new
+            '''for key, val in new.items():
+                try:
+                    n[key] += val
+                    n[key] = list(set(n[key]))
+                except KeyError:
+                    n[key] = val'''
+        print(n)
+        return n
+
+    def build_constraints(self):
+        flat_cubes = [item for sublist in self.cubes for item in sublist]
+        for item in flat_cubes:
+            # sum of neighbors cannot exceed 8
+            # this fails to account for duplicate neighbors, which is a HUGE oversight
+            self.model += lpSum([self.vars[self.output.index(key)] * len(self.neighborhoods[key][item]) for key in self.output]) <= 8
+        return
 
 #make_word_dict()
 #open_words()
@@ -209,11 +286,15 @@ old_boggle = [
 
 filename = 'big_list'
 
-b = BoggleOptimizer(w, filename)
-output = b.make_vars()
+b = BoggleOptimizer(small_test, filename)
+vars, output = b.make_vars()
 
-output.sort(key=len, reverse=True)
+# output.sort(key=len, reverse=True)
 
 print(output)
+print(vars)
 print(len(output))
+
+b.build_objective()
+
 
