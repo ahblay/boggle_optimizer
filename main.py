@@ -4,21 +4,8 @@ from pprint import pprint as pp
 from pulp import LpMinimize, LpProblem, LpStatus, lpSum, LpVariable, LpBinary, GUROBI_CMD
 
 
-'''def search_words(query):
-    with open('big_list.json') as f:
-        data = json.load(f)
-        try:
-            return data[query]
-        except KeyError:
-            return []
-
-
-def open_word_dict():
-    with open('big_list.json') as f:
-        data = json.load(f)
-    return data, sorted(data.keys())'''
-
-
+# creates a JSON object from a word list
+# keys are alphabetically ordered strings and values are their English word anagrams
 def make_word_dict(dict_filename):
     d = {}
     for word in wordlist:
@@ -32,8 +19,13 @@ def make_word_dict(dict_filename):
         json.dump(d, f)
 
 
+# a class for the Boggle LP
 class BoggleOptimizer:
+
+    # initializes class variables
     def __init__(self, w, dict_filename):
+
+        # dictionary of Boggle points for words of different lengths
         self.points = {
             1: 0,
             2: 0,
@@ -52,18 +44,30 @@ class BoggleOptimizer:
             15: 11,
             16: 11
         }
+
+        # the LP model
         self.model = LpProblem(name='Boggle', sense=LpMinimize)
+
+        # w is the nested list of dice, and cubes stores the letters and the associated dice they belong to
         self.w, self.cubes = self.sort_words(w)
+
+        # opens the JSON dictionary
         self.global_word_dict = self.open_word_dict(dict_filename)
+
+        # creates LP variables from the list of possible words
         self.vars, self.output = self.make_vars()
+
+        # calculates the set of letters adjacent to every letter in every word
         self.neighborhoods = self.total_neighborhoods()
 
+    # opens JSON file
     @staticmethod
     def open_word_dict(dict_filename):
         with open(f'{dict_filename}.json') as f:
             data = json.load(f)
         return data
 
+    # sorts nest list of letters and returns a sorted list and cubes
     @staticmethod
     def sort_words(w):
         s = sorted([sorted(l) for l in w])
@@ -85,6 +89,7 @@ class BoggleOptimizer:
                 return next_key[c]
         return query[-1]'''
 
+    # returns the original lists letters belong to after being anagrammed into English words
     def get_permutation_map(self, word):
         results = []
         str_word = ''.join([i[0] for i in word])
@@ -98,6 +103,7 @@ class BoggleOptimizer:
             results.append((w, indices))
         return results
 
+    # gets all words that can be formed by selecting at most one letter from each list in w
     def enumerate_words(self, w, output, current_word):
         # step out if we've used up all the available letters
         if 0 >= len(w):
@@ -140,54 +146,19 @@ class BoggleOptimizer:
                 break
         return list(set(output))
 
-    '''def enumerate_words(w, output, current_word):
-        global last_match
-        if 0 >= len(w):
-            return
-        while True:
-            new_letter = w[0][0]
-            new_word = current_word + new_letter
-            print(w)
-            print(new_word)
-            #next_entry = get_next_entry(new_word)
-            #print(f'next_entry: {next_entry}, new_letter: {new_letter}')
-            # sort w by new letter
-            # new_w = [l for l in w if new_letter not in l]
-            new_w = w[1:]
-            # print(sorted(new_w))
-            if True:
-    
-                try:
-                    matches = global_word_dict[new_word]
-                    output += matches
-                    #last_match = new_word
-                except KeyError:
-                    pass
-    
-                enumerate_words(sorted(new_w), output, new_word)
-            w = new_w + [w[0][1:]]
-            #w = [[i for i in l if i != new_letter] for l in w]
-            w = sorted([l for l in w if l != []])
-            #print(w)
-            if len(w) <= 0:
-                break
-        return list(set(output))'''
-
+    # creates varaibles from the words in output
     def make_vars(self):
-        #global global_word_dict
-        #global global_word_list
-        #global last_match
-        #global_word_dict, global_word_list = open_word_dict()
-        #last_match = global_word_list[0]
         output = self.enumerate_words(self.cubes, [], [])
         vars = [LpVariable(f'x_{item[0]}_{item[1]}', cat=LpBinary) for item in output]
         return vars, output
 
+    # builds an objective function with the point values as coefficients
     def build_objective(self):
         self.model += lpSum([self.points[len(self.output[i][0])] * self.vars[i] for i in range(len(self.output))])
         print(lpSum([self.points[len(self.output[i][0])] * self.vars[i] for i in range(len(self.output))]))
         return
 
+    # gets the letters that neighbor each letter in a given word
     @staticmethod
     def get_neighborhoods(word):
         neighborhoods = {}
@@ -201,6 +172,7 @@ class BoggleOptimizer:
             neighborhoods[(word_list[l], int(word[1].split('.')[l]))] = n
         return neighborhoods
 
+    # applies get_neighborhoods() to all words in self.output
     def total_neighborhoods(self):
         n = {}
         for item in self.output:
@@ -216,15 +188,20 @@ class BoggleOptimizer:
         return n
 
     def build_constraints(self):
+        # flattens self.cubes
         flat_cubes = [item for sublist in self.cubes for item in sublist]
+
+        # sum of neighbors cannot exceed 8
         for item in flat_cubes:
-            # sum of neighbors cannot exceed 8
+
             # this fails to account for duplicate neighbors, which is a HUGE oversight
             self.model += lpSum([self.vars[self.output.index(key)] * len(self.neighborhoods[key][item]) for key in self.output]) <= 8
         return
 
 #make_word_dict()
 #open_words()
+
+# test cases for dice
 
 small_test = [
     ['a', 'c', 'f'],
